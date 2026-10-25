@@ -13,10 +13,6 @@ class TaskCreate(BaseModel):
     title: str
     completed: bool = False
 
-tasks: list[dict] = []
-
-next_task_id = 1
-
 @app.get("/")
 def home():
     return {
@@ -47,11 +43,10 @@ def get_task(task_id: int, db: Session = Depends(get_db),):
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     global next_task_id
 
-    new_task = {
-        "id": next_task_id,
-        "title": task.title,
-        "completed": task.completed
-    }
+    new_task = models.Task(
+        title=task.title,
+        completed=task.completed,
+    )
 
     db.add(new_task)
     db.commit()
