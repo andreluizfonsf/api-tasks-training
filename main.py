@@ -1,7 +1,9 @@
 from fastapi import FastAPI, status, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from schemas import TaskCreate, TaskUpdate, TaskResponse, UserCreate, UserResponse
 
+from pwdlib import PasswordHash
 from database import Base, engine, get_db
 import models
 
@@ -9,9 +11,31 @@ app = FastAPI(title="API de Tarefas", description="API para gerenciar tarefas", 
 
 Base.metadata.create_all(bind=engine)
 
-class TaskCreate(BaseModel):
-    title: str
-    completed: bool = False
+password_hash = PasswordHash.recommended()
+
+@app.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+    
+    existing_user = db.query(models.User).filter(models.User.username == user_data.username).first()
+
+    if existing_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nome de usuário já cadastrado",
+        )
+
+    hashed_password = password_hash.hash(user_data.password)
+
+    new_user = models.User(
+        username=user_data.username,
+        hashed_password=hashed_password,
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
 
 @app.get("/")
 def home():
@@ -26,11 +50,11 @@ def health_check():
         "status": "OK"
     }
 
-@app.get("/tasks")
+@app.get("/tasks", response_model=list[TaskResponse])
 def list_tasks(db: Session = Depends(get_db)):
     return db.query(models.Task).all()
 
-@app.get("/tasks/{task_id}")
+@app.get("/tasks/{task_id}", response_model=TaskResponse)
 def get_task(task_id: int, db: Session = Depends(get_db),):
     task = db.query(models.Task).filter(models.Task.id == task_id).first()
 
@@ -39,7 +63,7 @@ def get_task(task_id: int, db: Session = Depends(get_db),):
 
     return task
 
-@app.post("/tasks", status_code=status.HTTP_201_CREATED)
+@app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     global next_task_id
 
@@ -54,7 +78,7 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
 
     return new_task
 
-@app.put("/tasks/{task_id}")
+@app.put("/tasks/{task_id}", response_model=TaskResponse)
 def update_task(task_id: int, updated_data: TaskCreate, db: Session = Depends(get_db),):
     task = db.query(models.Task).filter(
         models.Task.id == task_id
@@ -75,7 +99,8 @@ def update_task(task_id: int, updated_data: TaskCreate, db: Session = Depends(ge
     return task
 
 @app.delete("/tasks/{task_id}")
-def delete_task(task_id: int, db: Session = Depends(get_db)):
+def delete_task(task_id: int, db: Session = Depends(get_db),):
+
     task = db.query(models.Task).filter(
         models.Task.id == task_id
     ).first()
@@ -86,15 +111,16 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
             detail="Tarefa não encontrada",
         )
 
+    deleted_task = {
+        "id": task.id,
+        "title": task.title,
+        "completed": task.completed,
+    }
+
     db.delete(task)
     db.commit()
 
     return {
         "message": "Tarefa excluída com sucesso",
-        "task": {
-            "id": task.id,
-            "title": task.title,
-            "completed": task.completed,
-        },
+        "task": deleted_task,
     }
-
