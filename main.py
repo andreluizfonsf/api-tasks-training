@@ -3,7 +3,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from schemas import TaskCreate, TaskUpdate, TaskResponse, UserCreate, UserResponse
 
+from fastapi.security import OAuth2PasswordRequestForm
 from pwdlib import PasswordHash
+from security import create_access_token
+from auth import get_current_user
 from database import Base, engine, get_db
 import models
 
@@ -37,6 +40,29 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 
     return new_user
 
+
+@app.post("/auth/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == form_data.username).first()
+
+    if user is None or not password_hash.verify(
+        form_data.password,
+        user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuário ou senha incorretos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(user.id)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
+
+
 @app.get("/")
 def home():
     return {
@@ -51,20 +77,11 @@ def health_check():
     }
 
 @app.get("/tasks", response_model=list[TaskResponse])
-def list_tasks(db: Session = Depends(get_db)):
+def list_tasks(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     return db.query(models.Task).all()
 
-@app.get("/tasks/{task_id}", response_model=TaskResponse)
-def get_task(task_id: int, db: Session = Depends(get_db),):
-    task = db.query(models.Task).filter(models.Task.id == task_id).first()
-
-    if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarefa não encontrada")
-
-    return task
-
 @app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     global next_task_id
 
     new_task = models.Task(
@@ -78,8 +95,17 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
 
     return new_task
 
+@app.get("/tasks/{task_id}", response_model=TaskResponse)
+def get_task(task_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarefa não encontrada")
+
+    return task
+
 @app.put("/tasks/{task_id}", response_model=TaskResponse)
-def update_task(task_id: int, updated_data: TaskCreate, db: Session = Depends(get_db),):
+def update_task(task_id: int, updated_data: TaskCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     task = db.query(models.Task).filter(
         models.Task.id == task_id
     ).first()
@@ -99,7 +125,7 @@ def update_task(task_id: int, updated_data: TaskCreate, db: Session = Depends(ge
     return task
 
 @app.delete("/tasks/{task_id}")
-def delete_task(task_id: int, db: Session = Depends(get_db),):
+def delete_task(task_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
 
     task = db.query(models.Task).filter(
         models.Task.id == task_id
