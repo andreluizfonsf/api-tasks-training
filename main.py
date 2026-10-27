@@ -78,7 +78,7 @@ def health_check():
 
 @app.get("/tasks", response_model=list[TaskResponse])
 def list_tasks(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.Task).all()
+    return db.query(models.Task).filter(models.Task.user_id == current_user.id).all()
 
 @app.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -87,6 +87,7 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: m
     new_task = models.Task(
         title=task.title,
         completed=task.completed,
+        user_id=current_user.id
     )
 
     db.add(new_task)
@@ -97,7 +98,9 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: m
 
 @app.get("/tasks/{task_id}", response_model=TaskResponse)
 def get_task(task_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    task = (
+        db.query(models.Task).filter(models.Task.id == task_id, models.Task.user_id == current_user.id).first()
+    )
 
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarefa não encontrada")
