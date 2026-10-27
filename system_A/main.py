@@ -98,9 +98,8 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: m
 
 @app.get("/tasks/{task_id}", response_model=TaskResponse)
 def get_task(task_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    task = (
-        db.query(models.Task).filter(models.Task.id == task_id, models.Task.user_id == current_user.id).first()
-    )
+
+    task = (db.query(models.Task).filter(models.Task.id == task_id, models.Task.user_id == current_user.id).first())
 
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarefa não encontrada")
@@ -108,19 +107,20 @@ def get_task(task_id: int, db: Session = Depends(get_db), current_user: models.U
     return task
 
 @app.put("/tasks/{task_id}", response_model=TaskResponse)
-def update_task(task_id: int, updated_data: TaskCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    task = db.query(models.Task).filter(
-        models.Task.id == task_id
-    ).first()
+def update_task(task_id: int, task_update: TaskCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+
+    task = (db.query(models.Task).filter(models.Task.id == task_id, models.Task.user_id == current_user.id).first())
 
     if task is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Tarefa não encontrada",
         )
 
-    task.title = updated_data.title
-    task.completed = updated_data.completed
+    update_data = task_update.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(task, field, value)
 
     db.commit()
     db.refresh(task)
@@ -130,26 +130,15 @@ def update_task(task_id: int, updated_data: TaskCreate, db: Session = Depends(ge
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
 
-    task = db.query(models.Task).filter(
-        models.Task.id == task_id
-    ).first()
+    task = (db.query(models.Task).filter(models.Task.id == task_id, models.Task.user_id == current_user.id).first())
 
     if task is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Tarefa não encontrada",
         )
-
-    deleted_task = {
-        "id": task.id,
-        "title": task.title,
-        "completed": task.completed,
-    }
 
     db.delete(task)
     db.commit()
 
-    return {
-        "message": "Tarefa excluída com sucesso",
-        "task": deleted_task,
-    }
+    return {"message": "Tarefa excluída com sucesso"}
