@@ -64,19 +64,13 @@ async def login(
 
         sessions[session_id] = access_token
 
-        page = templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context={
-                "message": "Login realizado! Sua sessão está ativa.",
-            },
-        )
+        page = RedirectResponse(url="/tasks", status_code=303)
 
         page.set_cookie(
             key="session_id",
             value=session_id,
             httponly=True,
-            secure=False,  
+            secure=False,  # Apenas para desenvolvimento local em HTTP.
             samesite="lax",
             max_age=1800,
             path="/",
@@ -90,3 +84,119 @@ async def login(
         context={"message": "Usuário ou senha inválidos."},
         status_code=401,
     )
+
+
+@app.get("/tasks")
+async def show_tasks(request: Request):
+    
+    session_id = request.cookies.get("session_id")
+
+    if not session_id or session_id not in sessions:
+        return RedirectResponse(url="/", status_code=303)
+
+    access_token = sessions[session_id]
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{API_URL}/tasks",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                },
+            )
+        except httpx.RequestError:
+            return templates.TemplateResponse(
+                request=request,
+                name="index.html",
+                context={
+                    "message": "Não foi possível conectar à API.",
+                },
+                status_code=503,
+            )
+
+    if response.status_code == 401:
+        sessions.pop(session_id, None)
+
+        page = templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "message": "Sua sessão expirou. Faça login novamente.",
+            },
+        )
+        page.delete_cookie("session_id", path="/")
+        return page
+
+    if response.status_code != 200:
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "message": "Não foi possível carregar suas tarefas.",
+            },
+            status_code=502,
+        )
+
+    tasks = response.json()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="tasks.html",
+        context={"tasks": tasks},
+    )
+
+
+@app.post("/tasks")
+async def create_task(request: Request, title: str = Form(...)):
+    
+    session_id = request.cookies.get("session_id")
+
+    if not session_id or session_id not in sessions:
+        return RedirectResponse(url="/", status_code=303)
+
+    title = title.strip()
+
+    if not title:
+        return RedirectResponse(url="/tasks", status_code=303)
+
+    access_token = sessions[session_id]
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                f"{API_URL}/tasks",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                },
+                json={
+                    "title": title,
+                },
+            )
+        except httpx.RequestError:
+            return templates.TemplateResponse(
+                request=request,
+                name="index.html",
+                context={
+                    "message": "Não foi possível conectar à API.",
+                },
+                status_code=503,
+            )
+
+    if response.status_code == 401:
+        sessions.pop(session_id, None)
+
+        page = RedirectResponse(url="/", status_code=303)
+        page.delete_cookie("session_id", path="/")
+        return page
+
+    if response.status_code not in (200, 201):
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "message": "Não foi possível criar a tarefa.",
+            },
+            status_code=502,
+        )
+
+    return RedirectResponse(url="/tasks", status_code=303)

@@ -1,0 +1,52 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minhas tarefas</title>
+</head>
+<body>
+    <h1>Minhas tarefas</h1>
+
+    <p>Estas tarefas foram carregadas pela API REST.</p>
+
+    {% if tasks %}
+        <ul>
+            {% for task in tasks %}
+                <li>
+                    <strong>#{{ task.id }} — {{ task.title }}</strong>
+
+                    {% if task.completed %}
+                        <span> — Concluída</span>
+                    {% else %}
+                        <span> — Pendente</span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Você ainda não possui tarefas cadastradas.</p>
+    {% endif %}
+
+    
+    <h2>Nova tarefa</h2>
+
+    <form action="/tasks" method="post">
+        <label for="title">Título da tarefa:</label>
+
+        <input
+            type="text"
+            id="title"
+            name="title"
+            placeholder="Ex.: Estudar JWT"
+            required
+        >
+
+        <button type="submit">Criar tarefa</button>
+    </form>
+
+
+    <p><a href="/">Voltar ao login</a></p>
+</body>
+</html>
