@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import secrets
 import httpx
+
+from fastapi.responses import RedirectResponse
 from fastapi import FastAPI, Form, Request
 from fastapi.templating import Jinja2Templates
 
@@ -11,6 +14,8 @@ BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(
     directory=str(BASE_DIR / "templates")
 )
+
+sessions: dict[str, str] = {}
 
 API_URL = "http://127.0.0.1:8000"
 
@@ -24,6 +29,7 @@ def home(request: Request):
     )
 
 
+
 @app.post("/login")
 async def login(
     request: Request,
@@ -32,7 +38,6 @@ async def login(
 ):
     async with httpx.AsyncClient() as client:
         try:
-            
             response = await client.post(
                 f"{API_URL}/auth/login",
                 data={
@@ -40,36 +45,48 @@ async def login(
                     "password": password,
                 },
             )
-
         except httpx.RequestError:
-
             return templates.TemplateResponse(
                 request=request,
                 name="index.html",
                 context={
-                    "message": "Não foi possível conectar à API. Verifique se o Sistema A está rodando.",
+                    "message": "Não foi possível conectar à API.",
                 },
                 status_code=503,
             )
 
-    
     if response.status_code == 200:
-    
+        
         token_data = response.json()
-
         access_token = token_data["access_token"]
-        token_type = token_data["token_type"]
 
-        message = (
-            f"Login realizado! Tipo de token: {token_type}. "
-            f"Token recebido: {'sim' if access_token else 'não'}."
+        session_id = secrets.token_urlsafe(32)
+
+        sessions[session_id] = access_token
+
+        page = templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "message": "Login realizado! Sua sessão está ativa.",
+            },
         )
-    else:
-        message = "Usuário ou senha inválidos."
 
+        page.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            secure=False,  
+            samesite="lax",
+            max_age=1800,
+            path="/",
+        )
+
+        return page
 
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"message": message},
+        context={"message": "Usuário ou senha inválidos."},
+        status_code=401,
     )
