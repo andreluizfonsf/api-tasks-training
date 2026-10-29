@@ -4,13 +4,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Tarefas</title>
+    <title>Login - Sistema de Tarefas</title>
 </head>
 <body>
     <h1>Sistema de Tarefas</h1>
+    <p>Entre com sua conta para acessar suas tarefas.</p>
 
-    <p>Bem-vindo ao cliente da nossa API REST!</p>
+    <form action="/login" method="post">
+        <div>
+            <label for="username">Usuário:</label>
+            <input
+                type="text"
+                id="username"
+                name="username"
+                required>
+        </div>
 
-    <p id="status">Sistema B funcionando.</p>
+        <br>
+
+        <div>
+            <label for="password">Senha:</label>
+            <input
+                type="password"
+                id="password"
+                name="password"
+                required>
+        </div>
+
+        <br>
+
+        <button type="submit">Entrar</button>
+    </form>
+
+    {% if message %}
+        <p>{{ message }}</p>
+    {% endif %}
 </body>
 </html>
